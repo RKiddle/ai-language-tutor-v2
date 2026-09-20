@@ -41,14 +41,11 @@ app.post('/api/chat', async (req, res) => {
       }
 
       // Initialize conversation with system prompt
+      // Send just the scenario prompt and return model's response
       const initContents = [
         {
           role: 'user',
           parts: [{ text: scenarioData.prompt }]
-        },
-        {
-          role: 'model',
-          parts: [{ text: 'Understood. I am in character. You can speak to me now.' }]
         }
       ];
 
@@ -78,6 +75,13 @@ app.post('/api/chat', async (req, res) => {
         details: 'Missing or invalid "contents" field'
       });
     }
+
+    // Log incoming request for debugging
+    console.log('Incoming chat request:', {
+      contentsLength: contents.length,
+      lastTurn: contents[contents.length - 1]?.role,
+      fullContents: JSON.stringify(contents, null, 2).substring(0, 500)
+    });
 
     // Call Gemini API
     const response = await fetch(
