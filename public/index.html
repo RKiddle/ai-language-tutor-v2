@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🗣️ Language Scenario Trainer</title>
+    <style>
+        * { box-sizing: border-box; }
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
+            max-width: 700px; 
+            margin: 0 auto; 
+            padding: 1rem; 
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        .container { display: flex; flex-direction: column; gap: 1rem; }
+        .card { 
+            background: white; 
+            padding: 1.5rem; 
+            border-radius: 12px; 
+            box-shadow: 0 8px 16px rgba(0,0,0,0.1);
+        }
+        h1 { 
+            margin: 0 0 0.5rem 0; 
+            font-size: 1.8rem; 
+            color: #333;
+            text-align: center;
+        }
+        .subtitle { 
+            text-align: center; 
+            color: #666; 
+            font-size: 0.9rem; 
+            margin-bottom: 1.5rem;
+        }
+        label { 
+            display: block; 
+            margin: 12px 0 6px; 
+            font-weight: 600; 
+            color: #333;
+            font-size: 0.95rem;
+        }
+        input[type="password"], select { 
+            width: 100%; 
+            padding: 12px; 
+            margin-bottom: 12px; 
+            border: 2px solid #e0e0e0; 
+            border-radius: 6px; 
+            font-size: 1rem;
+            transition: border-color 0.2s;
+        }
+        input[type="password"]:focus, select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        input[type="text"] {
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            font-size: 1rem;
+            transition: border-color 0.2s;
+        }
+        input[type="text"]:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        #chat-box { 
+            height: 320px; 
+            overflow-y: auto; 
+            border: 1px solid #eee; 
+            padding: 12px; 
+            border-radius: 8px; 
+            background: #fafafa; 
+            display: flex; 
+            flex-direction: column; 
+            gap: 8px; 
+            margin-bottom: 12px;
+            scroll-behavior: smooth;
+        }
+        .message { 
+            max-width: 85%; 
+            padding: 10px 12px; 
+            border-radius: 8px; 
+            line-height: 1.5;
+            word-wrap: break-word;
+        }
+        .user-msg { 
+            background: #667eea; 
+            color: white; 
+            align-self: flex-end; 
+            border-bottom-right-radius: 2px;
+        }
+        .ai-msg { 
+            background: #e9ecef; 
+            color: #333; 
+            align-self: flex-start; 
+            border-bottom-left-radius: 2px;
+        }
+        .system-msg { 
+            background: #fff3cd; 
+            color: #856404; 
+            align-self: center; 
+            text-align: center; 
+            font-size: 0.85rem; 
+            width: 100%;
+            border-radius: 6px;
+        }
+        .error-msg {
+            background: #f8d7da;
+            color: #721c24;
+            align-self: center;
+            text-align: center;
+            font-size: 0.85rem;
+            width: 100%;
+            border-radius: 6px;
+        }
+        .success-msg {
+            background: #d4edda;
+            color: #155724;
+            align-self: center;
+            text-align: center;
+            font-size: 0.85rem;
+            width: 100%;
+            border-radius: 6px;
+            font-weight: 600;
+        }
+        .controls { 
+            display: flex; 
+            gap: 10px; 
+            margin-bottom: 12px;
+        }
+        #text-input {
+            flex: 1;
+            margin: 0;
+        }
+        button { 
+            padding: 12px 16px; 
+            border: none; 
+            border-radius: 6px; 
+            font-weight: 600; 
+            cursor: pointer; 
+            transition: all 0.2s;
+            font-size: 0.95rem;
+        }
+        #start-btn { 
+            background: #667eea; 
+            color: white; 
+            width: 100%; 
+            margin-bottom: 12px;
+        }
+        #start-btn:hover {
+            background: #5568d3;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+        #start-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+        #mic-btn { 
+            background: #ff4757; 
+            color: white; 
+            flex: 0 0 auto;
+        }
+        #mic-btn:hover:not(:disabled) {
+            background: #ff3838;
+        }
+        #mic-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        #mic-btn.recording { 
+            background: #ff6b81; 
+            animation: pulse 1s infinite; 
+        }
+        #send-btn { 
+            background: #2ed573; 
+            color: white; 
+            flex: 0 0 auto;
+        }
+        #send-btn:hover:not(:disabled) {
+            background: #26de81;
+        }
+        #send-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        @keyframes pulse { 
+            0% { transform: scale(1); } 
+            50% { transform: scale(1.05); } 
+            100% { transform: scale(1); } 
+        }
+        .loading { 
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            background: #667eea;
+            border-radius: 50%;
+            animation: bounce 1.4s infinite ease-in-out both;
+            margin-right: 4px;
+        }
+        .loading:nth-child(2) { animation-delay: -0.32s; }
+        .loading:nth-child(3) { animation-delay: -0.16s; }
+        @keyframes bounce {
+            0%, 80%, 100% { transform: scale(0); opacity: 0.5; }
+            40% { transform: scale(1); opacity: 1; }
+        }
+        .info-text {
+            font-size: 0.85rem;
+            color: #666;
+            margin-top: 0.5rem;
+        }
+        select {
+            cursor: pointer;
+        }
+        @media (max-width: 600px) {
+            body { padding: 0.5rem; }
+            .card { padding: 1rem; }
+            h1 { font-size: 1.4rem; }
+            #chat-box { height: 280px; }
+            .message { max-width: 92%; }
+            button { padding: 10px 12px; font-size: 0.9rem; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="card">
+            <h1>🗣️ Language Scenario Trainer</h1>
+            <p class="subtitle">Practice speaking with AI-powered scenarios</p>
+            
+            <label>Choose a Scenario:</label>
+            <select id="scenario-select">
+                <option value="">-- Select a scenario --</option>
+                <option value="bangkok">🇹🇭 Bangkok Street Food (Order Pork & Sticky Rice)</option>
+                <option value="tokyo">🇯🇵 Tokyo 7-11 (Order Hot Coffee)</option>
+                <option value="madrid">🇪🇸 Madrid Taxi (Give an address)</option>
+                <option value="paris">🇫🇷 Paris Restaurant (Order a meal & wine)</option>
+                <option value="beijing">🇨🇳 Beijing Train Station (Buy a ticket)</option>
+                <option value="berlin">🇩🇪 Berlin Hotel (Check in)</option>
+            </select>
+            <button id="start-btn">Start Scenario</button>
+            <div class="info-text">💡 Tip: Hold the mic button to speak, or type your response.</div>
+        </div>
+
+        <div class="card">
+            <div id="chat-box">
+                <div class="message system-msg">Select a scenario and click Start to begin.</div>
+            </div>
+            
+            <div class="controls">
+                <input type="text" id="text-input" placeholder="Type your response..." />
+                <button id="mic-btn">🎤</button>
+                <button id="send-btn">Send</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const chatBox = document.getElementById('chat-box');
+        const textInput = document.getElementById('text-input');
+        const micBtn = document.getElementById('mic-btn');
+        const sendBtn = document.getElementById('send-btn');
+        const startBtn = document.getElementById('start-btn');
+        const scenarioSelect = document.getElementById('scenario-select');
+        
+        let conversationHistory = [];
+        let recognition;
+        let currentLanguage = 'th-TH';
+        let isScenarioActive = false;
+        let isWaiting = false;
+
+        // Inline scenarios for UI (prompt is on backend)
+        const scenariosUI = {
+            bangkok: { name: 'Bangkok Food Stall', lang: 'th-TH' },
+            tokyo: { name: 'Tokyo 7-11', lang: 'ja-JP' },
+            madrid: { name: 'Madrid Taxi', lang: 'es-ES' },
+            paris: { name: 'Paris Restaurant', lang: 'fr-FR' },
+            beijing: { name: 'Beijing Train Station', lang: 'zh-CN' },
+            berlin: { name: 'Berlin Hotel', lang: 'de-DE' }
+        };
+
+        // Initialize Speech Recognition
+        if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            recognition = new SpeechRecognition();
+            recognition.continuous = false;
+            recognition.interimResults = false;
+            
+            recognition.onstart = () => {
+                micBtn.classList.add('recording');
+            };
+            
+            recognition.onend = () => {
+                micBtn.classList.remove('recording');
+            };
+            
+            recognition.onresult = (event) => {
+                const transcript = event.results[0][0].transcript;
+                textInput.value = transcript;
+                sendMessage();
+            };
+
+            recognition.onerror = (event) => {
+                let errorMsg = 'Microphone error. Please try again.';
+                if (event.error === 'no-speech') {
+                    errorMsg = 'No speech detected. Please try again.';
+                } else if (event.error === 'network') {
+                    errorMsg = 'Network error with microphone. Check your internet.';
+                }
+                addMessage(errorMsg, 'error-msg');
+            };
+        } else {
+            micBtn.disabled = true;
+            micBtn.title = "Microphone not supported in your browser";
+        }
+
+        micBtn.addEventListener('mousedown', () => {
+            if (recognition && isScenarioActive) {
+                recognition.lang = currentLanguage;
+                recognition.start();
+            }
+        });
+
+        micBtn.addEventListener('mouseup', () => {
+            if (recognition) {
+                recognition.stop();
+            }
+        });
+
+        startBtn.addEventListener('click', () => {
+            const scenarioKey = scenarioSelect.value;
+            
+            if (!scenarioKey) {
+                addMessage('Please select a scenario first.', 'error-msg');
+                return;
+            }
+
+            const scenarioUI = scenariosUI[scenarioKey];
+            const scenario = scenarioKey;
+            currentLanguage = scenarioUI.lang;
+            isScenarioActive = true;
+            
+            conversationHistory = [];
+            chatBox.innerHTML = '';
+            addMessage(`🚀 Started: ${scenarioUI.name}`, 'system-msg');
+            addMessage('Waiting for AI to respond...', 'system-msg');
+            
+            // Show loading spinner
+            isWaiting = true;
+            updateButtonStates();
+            
+            // Send initial scenario setup to backend
+            initializeScenario(scenarioKey);
+        });
+
+        async function initializeScenario(scenarioKey) {
+            try {
+                const response = await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        scenario: scenarioKey,
+                        initialize: true,
+                        contents: []
+                    })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    addMessage(`Error: ${data.error}`, 'error-msg');
+                    isScenarioActive = false;
+                    isWaiting = false;
+                    updateButtonStates();
+                    return;
+                }
+
+                // First message from AI
+                const aiResponse = data.candidates?.[0]?.content?.parts?.[0]?.text || 'Ready!';
+                conversationHistory.push({ role: 'model', parts: [{ text: aiResponse }] });
+                
+                chatBox.innerHTML = ''; // Clear "Waiting..." message
+                addMessage(aiResponse, 'ai-msg');
+                speakText(aiResponse, currentLanguage);
+            } catch (error) {
+                addMessage(`Connection error: ${error.message}`, 'error-msg');
+                isScenarioActive = false;
+            } finally {
+                isWaiting = false;
+                updateButtonStates();
+            }
+        }
+
+        async function sendMessage() {
+            const text = textInput.value.trim();
+            
+            if (!text) {
+                addMessage('Please enter a message.', 'error-msg');
+                return;
+            }
+
+            if (!isScenarioActive) {
+                addMessage('Start a scenario first.', 'error-msg');
+                return;
+            }
+
+            addMessage(text, 'user-msg');
+            textInput.value = '';
+            
+            conversationHistory.push({ role: 'user', parts: [{ text: text }] });
+
+            isWaiting = true;
+            updateButtonStates();
+
+            try {
+                const response = await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ contents: conversationHistory })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    const errorMsg = data.error || 'Unknown error occurred';
+                    addMessage(`⚠️ Error: ${errorMsg}`, 'error-msg');
+                    return;
+                }
+
+                let aiText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+                
+                if (!aiText) {
+                    addMessage('No response from AI.', 'error-msg');
+                    return;
+                }
+                
+                conversationHistory.push({ role: 'model', parts: [{ text: aiText }] });
+                
+                // Check win condition
+                if (aiText.includes("[SUCCESS]")) {
+                    aiText = aiText.replace("[SUCCESS]", "").trim();
+                    addMessage(aiText, 'ai-msg');
+                    speakText(aiText, currentLanguage);
+                    setTimeout(() => {
+                        addMessage("🎉 SCENARIO COMPLETE! Great job!", 'success-msg');
+                        isScenarioActive = false;
+                        updateButtonStates();
+                    }, 500);
+                } else {
+                    addMessage(aiText, 'ai-msg');
+                    speakText(aiText, currentLanguage);
+                }
+
+            } catch (error) {
+                addMessage(`Connection error: ${error.message}`, 'error-msg');
+            } finally {
+                isWaiting = false;
+                updateButtonStates();
+            }
+        }
+
+        function updateButtonStates() {
+            micBtn.disabled = !isScenarioActive || isWaiting;
+            sendBtn.disabled = isWaiting;
+            startBtn.disabled = isWaiting;
+            scenarioSelect.disabled = isScenarioActive;
+        }
+
+        sendBtn.addEventListener('click', sendMessage);
+        textInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && !isWaiting) sendMessage();
+        });
+
+        function addMessage(text, className) {
+            const div = document.createElement('div');
+            div.className = `message ${className}`;
+            div.innerText = text;
+            chatBox.appendChild(div);
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+
+        function speakText(text, lang) {
+            try {
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.lang = lang;
+                
+                // Try to pick a native voice if available
+                const voices = window.speechSynthesis.getVoices();
+                const langCode = lang.split('-')[0];
+                const nativeVoice = voices.find(v => v.lang.startsWith(langCode));
+                
+                if (nativeVoice) {
+                    utterance.voice = nativeVoice;
+                }
+                
+                utterance.rate = 0.9; // Slightly slower for clarity
+                window.speechSynthesis.cancel(); // Cancel any previous speech
+                window.speechSynthesis.speak(utterance);
+            } catch (error) {
+                console.warn('Text-to-speech error:', error);
+            }
+        }
+        
+        // Load voices early
+        window.speechSynthesis.onvoiceschanged = () => {
+            window.speechSynthesis.getVoices();
+        };
+
+        // Initialize button states
+        updateButtonStates();
+    </script>
+</body>
+</html>

@@ -1,0 +1,23 @@
+{
+  "name": "ai-language-tutor",
+  "version": "1.0.0",
+  "description": "Voice-interactive language learning app powered by Gemini AI",
+  "main": "api/chat.js",
+  "type": "module",
+  "scripts": {
+    "dev": "node api/chat.js",
+    "build": "echo 'No build step required'",
+    "start": "node api/chat.js"
+  },
+  "keywords": ["language-learning", "ai", "gemini", "voice"],
+  "author": "Richard",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
