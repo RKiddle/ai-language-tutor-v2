@@ -1,7 +1,6 @@
 {
   "version": 2,
   "buildCommand": "npm run build",
-  "public": true,
   "functions": {
     "api/**/*.js": {
       "runtime": "nodejs18.x"
