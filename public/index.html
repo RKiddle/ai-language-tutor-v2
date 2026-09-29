@@ -277,6 +277,7 @@
         let audioQueue = [];
         let isPlayingAudio = false;
         let useFallbackTTS = false; // Flag to use Web Speech Synthesis if Gemini TTS fails
+        let currentStreamingResponse = ''; // Accumulate streamed text for audio playback
 
         // Inline scenarios for UI (prompt is on backend)
         const scenariosUI = {
@@ -365,9 +366,15 @@
                         break;
 
                     case 'complete':
-                        console.log('[Stream] Complete');
+                        console.log('[Stream] Complete. Speaking:', currentStreamingResponse.substring(0, 50));
                         isWaiting = false;
                         updateButtonStates();
+                        
+                        // Speak the accumulated response
+                        if (currentStreamingResponse.trim()) {
+                            speakText(currentStreamingResponse, currentLanguage);
+                        }
+                        currentStreamingResponse = '';
                         break;
 
                     case 'error':
@@ -383,6 +390,9 @@
         }
 
         function handleTextChunk(text) {
+            // Accumulate text for audio playback
+            currentStreamingResponse += text;
+            
             // Append text chunk to the current AI message
             const messages = chatBox.querySelectorAll('.ai-msg');
             const lastMessage = messages[messages.length - 1];
@@ -435,42 +445,53 @@
             recognition.interimResults = false;
             
             recognition.onstart = () => {
+                console.log('[Microphone] Recording started');
                 micBtn.classList.add('recording');
             };
             
             recognition.onend = () => {
+                console.log('[Microphone] Recording ended');
                 micBtn.classList.remove('recording');
             };
             
             recognition.onresult = (event) => {
                 const transcript = event.results[0][0].transcript;
+                console.log('[Microphone] Transcript:', transcript);
                 textInput.value = transcript;
                 sendMessage();
             };
 
             recognition.onerror = (event) => {
+                console.error('[Microphone] Error:', event.error);
                 let errorMsg = 'Microphone error. Please try again.';
                 if (event.error === 'no-speech') {
                     errorMsg = 'No speech detected. Please try again.';
                 } else if (event.error === 'network') {
                     errorMsg = 'Network error with microphone. Check your internet.';
+                } else if (event.error === 'not-allowed') {
+                    errorMsg = 'Microphone permission denied. Please enable it in browser settings.';
                 }
                 addMessage(errorMsg, 'error-msg');
             };
         } else {
+            console.warn('[Microphone] Not supported in this browser');
             micBtn.disabled = true;
             micBtn.title = "Microphone not supported in your browser";
         }
 
         micBtn.addEventListener('mousedown', () => {
             if (recognition && isScenarioActive) {
+                console.log('[Microphone] Starting recognition in language:', currentLanguage);
                 recognition.lang = currentLanguage;
                 recognition.start();
+            } else {
+                console.warn('[Microphone] Recognition not available or scenario not active');
             }
         });
 
         micBtn.addEventListener('mouseup', () => {
             if (recognition) {
+                console.log('[Microphone] Stopping recognition');
                 recognition.stop();
             }
         });
@@ -698,23 +719,56 @@
 
         function speakText(text, lang) {
             try {
-                const utterance = new SpeechSynthesisUtterance(text);
-                utterance.lang = lang;
+                console.log('[TTS] Speaking:', text.substring(0, 60), '... in language:', lang);
                 
-                // Try to pick a native voice if available
-                const voices = window.speechSynthesis.getVoices();
-                const langCode = lang.split('-')[0];
-                const nativeVoice = voices.find(v => v.lang.startsWith(langCode));
+                // Cancel any ongoing speech
+                window.speechSynthesis.cancel();
                 
-                if (nativeVoice) {
-                    utterance.voice = nativeVoice;
-                }
-                
-                utterance.rate = 0.9; // Slightly slower for clarity
-                window.speechSynthesis.cancel(); // Cancel any previous speech
-                window.speechSynthesis.speak(utterance);
+                // Small delay to ensure cancellation takes effect
+                setTimeout(() => {
+                    try {
+                        const utterance = new SpeechSynthesisUtterance(text);
+                        utterance.lang = lang;
+                        utterance.rate = 0.9; // Slightly slower for clarity
+                        utterance.pitch = 1;
+                        utterance.volume = 1;
+                        
+                        // Try to pick a native voice if available
+                        const voices = window.speechSynthesis.getVoices();
+                        console.log('[TTS] Available voices:', voices.length);
+                        
+                        const langCode = lang.split('-')[0];
+                        const nativeVoice = voices.find(v => v.lang.startsWith(langCode));
+                        
+                        if (nativeVoice) {
+                            console.log('[TTS] Using voice:', nativeVoice.name);
+                            utterance.voice = nativeVoice;
+                        } else {
+                            console.log('[TTS] No native voice found for', langCode, ', using default');
+                        }
+                        
+                        // Event handlers
+                        utterance.onstart = () => {
+                            console.log('[TTS] Speech started');
+                        };
+                        
+                        utterance.onend = () => {
+                            console.log('[TTS] Speech finished');
+                        };
+                        
+                        utterance.onerror = (event) => {
+                            console.error('[TTS] Speech error:', event.error);
+                        };
+                        
+                        // Start speaking
+                        window.speechSynthesis.speak(utterance);
+                        console.log('[TTS] Speech queued');
+                    } catch (innerError) {
+                        console.error('[TTS] Inner error:', innerError);
+                    }
+                }, 100);
             } catch (error) {
-                console.warn('Text-to-speech error:', error);
+                console.warn('[TTS] Error:', error);
             }
         }
         
