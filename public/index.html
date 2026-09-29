@@ -270,6 +270,13 @@
         let currentLanguage = 'th-TH';
         let isScenarioActive = false;
         let isWaiting = false;
+        
+        // WebSocket & Audio
+        let ws = null;
+        let audioContext = null;
+        let audioQueue = [];
+        let isPlayingAudio = false;
+        let useFallbackTTS = false; // Flag to use Web Speech Synthesis if Gemini TTS fails
 
         // Inline scenarios for UI (prompt is on backend)
         const scenariosUI = {
@@ -280,6 +287,145 @@
             beijing: { name: 'Beijing Train Station', lang: 'zh-CN' },
             berlin: { name: 'Berlin Hotel', lang: 'de-DE' }
         };
+
+        // ============================================================================
+        // WebSocket Management
+        // ============================================================================
+
+        function initializeWebSocket() {
+            return new Promise((resolve, reject) => {
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    resolve();
+                    return;
+                }
+
+                try {
+                    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                    const host = window.location.host;
+                    const wsUrl = `${protocol}//${host}/chat`;
+                    
+                    console.log('[WebSocket] Attempting to connect to:', wsUrl);
+                    ws = new WebSocket(wsUrl);
+
+                    // Set timeout
+                    let openTimeout = setTimeout(() => {
+                        console.error('[WebSocket] Connection timeout after 5s');
+                        ws.close();
+                        reject(new Error('WebSocket connection timeout'));
+                    }, 5000);
+
+                    ws.onopen = () => {
+                        clearTimeout(openTimeout);
+                        console.log('[WebSocket] Connected successfully');
+                        resolve();
+                    };
+
+                    ws.onmessage = handleWebSocketMessage;
+
+                    ws.onerror = (error) => {
+                        clearTimeout(openTimeout);
+                        console.error('[WebSocket] Connection error:', error);
+                        addMessage('Connection error. Falling back to REST API.', 'error-msg');
+                        reject(error);
+                    };
+
+                    ws.onclose = (event) => {
+                        clearTimeout(openTimeout);
+                        console.log('[WebSocket] Disconnected. Code:', event.code, 'Reason:', event.reason);
+                    };
+                } catch (error) {
+                    console.error('[WebSocket] Connection failed:', error);
+                    reject(error);
+                }
+            });
+        }
+
+        function handleWebSocketMessage(event) {
+            try {
+                const data = JSON.parse(event.data);
+
+                switch (data.type) {
+                    case 'session':
+                        console.log('[WebSocket] Session:', data.sessionId);
+                        break;
+
+                    case 'text':
+                        handleTextChunk(data.content);
+                        break;
+
+                    case 'tts':
+                        console.log('[TTS] Audio chunk for:', data.text.substring(0, 40));
+                        // Text chunk ready for TTS - in production would generate audio here
+                        break;
+
+                    case 'tts_error':
+                        console.error('[TTS] Error:', data.message);
+                        useFallbackTTS = true;
+                        addMessage('Note: Using browser speech synthesis (Gemini TTS unavailable)', 'system-msg');
+                        break;
+
+                    case 'complete':
+                        console.log('[Stream] Complete');
+                        isWaiting = false;
+                        updateButtonStates();
+                        break;
+
+                    case 'error':
+                        handleWebSocketError(data);
+                        break;
+
+                    default:
+                        console.log('[WebSocket] Unknown message type:', data.type);
+                }
+            } catch (error) {
+                console.error('[WebSocket] Parse error:', error);
+            }
+        }
+
+        function handleTextChunk(text) {
+            // Append text chunk to the current AI message
+            const messages = chatBox.querySelectorAll('.ai-msg');
+            const lastMessage = messages[messages.length - 1];
+
+            if (lastMessage) {
+                lastMessage.innerText += text;
+            } else {
+                addMessage(text, 'ai-msg');
+            }
+
+            // Update conversation history
+            if (conversationHistory.length > 0) {
+                const lastHistoryMsg = conversationHistory[conversationHistory.length - 1];
+                if (lastHistoryMsg.role === 'model') {
+                    lastHistoryMsg.parts[0].text += text;
+                }
+            }
+
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+
+        function handleWebSocketError(data) {
+            console.error('[WebSocket] Error:', data.stage, data.message);
+            addMessage(`Error (${data.stage}): ${data.message}`, 'error-msg');
+            isWaiting = false;
+            updateButtonStates();
+        }
+
+        // ============================================================================
+        // Web Audio API
+        // ============================================================================
+
+        function initializeAudioContext() {
+            if (!audioContext) {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                console.log('[Audio] Context initialized, sample rate:', audioContext.sampleRate);
+            }
+            return audioContext;
+        }
+
+        // ============================================================================
+        // Speech Recognition (Unchanged - Web Speech API)
+        // ============================================================================
 
         // Initialize Speech Recognition
         if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
@@ -329,7 +475,11 @@
             }
         });
 
-        startBtn.addEventListener('click', () => {
+        // ============================================================================
+        // Scenario Initialization (WebSocket Version)
+        // ============================================================================
+
+        startBtn.addEventListener('click', async () => {
             const scenarioKey = scenarioSelect.value;
             
             if (!scenarioKey) {
@@ -338,24 +488,54 @@
             }
 
             const scenarioUI = scenariosUI[scenarioKey];
-            const scenario = scenarioKey;
             currentLanguage = scenarioUI.lang;
             isScenarioActive = true;
+            useFallbackTTS = false;
             
             conversationHistory = [];
             chatBox.innerHTML = '';
             addMessage(`🚀 Started: ${scenarioUI.name}`, 'system-msg');
-            addMessage('Waiting for AI to respond...', 'system-msg');
+            addMessage('Connecting...', 'system-msg');
             
-            // Show loading spinner
-            isWaiting = true;
             updateButtonStates();
             
-            // Send initial scenario setup to backend
-            initializeScenario(scenarioKey);
+            try {
+                // Initialize WebSocket
+                await initializeWebSocket();
+                addMessage('Connected. Initializing scenario...', 'system-msg');
+
+                // Initialize audio context (required for Web Audio API)
+                initializeAudioContext();
+
+                // Send initialization message via WebSocket
+                ws.send(JSON.stringify({
+                    type: 'init',
+                    scenario: scenarioKey
+                }));
+
+                // Clear "Connecting..." message
+                setTimeout(() => {
+                    const systemMsgs = chatBox.querySelectorAll('.system-msg');
+                    if (systemMsgs.length > 1) {
+                        systemMsgs[systemMsgs.length - 1].remove();
+                    }
+                }, 500);
+
+                isWaiting = true;
+                updateButtonStates();
+            } catch (error) {
+                addMessage(`Connection failed: ${error.message}`, 'error-msg');
+                isScenarioActive = false;
+                updateButtonStates();
+                
+                // Fallback: Use REST API
+                console.log('Falling back to REST API...');
+                await initializeScenarioREST(scenarioKey);
+            }
         });
 
-        async function initializeScenario(scenarioKey) {
+        // Fallback: REST API version of scenario initialization
+        async function initializeScenarioREST(scenarioKey) {
             try {
                 const response = await fetch('/api/chat', {
                     method: 'POST',
@@ -381,7 +561,7 @@
                 const aiResponse = data.candidates?.[0]?.content?.parts?.[0]?.text || 'Ready!';
                 conversationHistory.push({ role: 'model', parts: [{ text: aiResponse }] });
                 
-                chatBox.innerHTML = ''; // Clear "Waiting..." message
+                chatBox.innerHTML = ''; // Clear loading messages
                 addMessage(aiResponse, 'ai-msg');
                 speakText(aiResponse, currentLanguage);
             } catch (error) {
@@ -392,6 +572,10 @@
                 updateButtonStates();
             }
         }
+
+        // ============================================================================
+        // Send Message (WebSocket Version with Fallback)
+        // ============================================================================
 
         async function sendMessage() {
             const text = textInput.value.trim();
@@ -414,6 +598,29 @@
             isWaiting = true;
             updateButtonStates();
 
+            try {
+                // Try WebSocket first
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    console.log('[Chat] Sending via WebSocket');
+                    ws.send(JSON.stringify({
+                        type: 'chat',
+                        message: text
+                    }));
+                } else {
+                    // Fallback to REST API
+                    console.log('[Chat] WebSocket not available, using REST API');
+                    await sendMessageREST(text);
+                }
+            } catch (error) {
+                console.error('[Chat] Error:', error);
+                addMessage(`Error: ${error.message}`, 'error-msg');
+                isWaiting = false;
+                updateButtonStates();
+            }
+        }
+
+        // Fallback: REST API version of send message
+        async function sendMessageREST(text) {
             try {
                 const response = await fetch('/api/chat', {
                     method: 'POST',
@@ -461,6 +668,10 @@
             }
         }
 
+        // ============================================================================
+        // UI Utilities
+        // ============================================================================
+
         function updateButtonStates() {
             micBtn.disabled = !isScenarioActive || isWaiting;
             sendBtn.disabled = isWaiting;
@@ -480,6 +691,10 @@
             chatBox.appendChild(div);
             chatBox.scrollTop = chatBox.scrollHeight;
         }
+
+        // ============================================================================
+        // Text-to-Speech (Web Speech Synthesis - Fallback)
+        // ============================================================================
 
         function speakText(text, lang) {
             try {
